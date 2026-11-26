@@ -1,0 +1,5 @@
+# Local API configuration with secret key
+api.conf
+
+# Compiled executables (distribute via GitHub Releases)
+*.exe

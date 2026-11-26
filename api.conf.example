@@ -1,0 +1,10 @@
+# vskit terminal config (copy to api.conf and fill in your key)
+api=1
+url=https://tooken.club/v1
+key=YOUR_API_KEY_HERE
+model=deepseek-v4-flash
+effort=
+tools=1
+approve=auto
+workdir=
+system=You are a concise assistant answering inside a small terminal. Plain text only, no markdown, no emoji. Keep answers short unless asked for detail.
