@@ -42,10 +42,16 @@ namespace QwenTerminal
         [DllImport("kernel32.dll")]
         private static extern uint GetOEMCP();
 
+        private static bool IsWindows()
+        {
+            return Environment.OSVersion.Platform == PlatformID.Win32NT;
+        }
+
         private static readonly Encoding OemEncoding = GetOem();
 
         private static Encoding GetOem()
         {
+            if (!IsWindows()) return new UTF8Encoding(false);
             try { return Encoding.GetEncoding((int)GetOEMCP()); }
             catch { return Encoding.Default; }
         }
@@ -815,19 +821,26 @@ namespace QwenTerminal
                 try
                 {
                     ProcessStartInfo psi = new ProcessStartInfo();
-                    psi.FileName = "cmd.exe";
-                    psi.Arguments = "/c " + command;
+                    if (IsWindows())
+                    {
+                        psi.FileName = "cmd.exe";
+                        psi.Arguments = "/c " + command;
+                        psi.StandardOutputEncoding = OemEncoding;
+                        psi.StandardErrorEncoding = OemEncoding;
+                    }
+                    else
+                    {
+                        psi.FileName = "/bin/sh";
+                        psi.Arguments = "-c \"" + command.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+                        psi.StandardOutputEncoding = Encoding.UTF8;
+                        psi.StandardErrorEncoding = Encoding.UTF8;
+                    }
                     psi.WorkingDirectory = EffectiveWorkDir();
                     psi.UseShellExecute = false;
                     psi.RedirectStandardInput = true;
                     psi.RedirectStandardOutput = true;
                     psi.RedirectStandardError = true;
                     psi.CreateNoWindow = true;
-                    // cmd.exe writes in the console OEM codepage (cp866 on
-                    // Russian Windows). Decode with that, not UTF-8, or
-                    // Cyrillic output becomes mojibake.
-                    psi.StandardOutputEncoding = OemEncoding;
-                    psi.StandardErrorEncoding = OemEncoding;
 
                     StringBuilder outBuf = new StringBuilder();
                     StringBuilder errBuf = new StringBuilder();
@@ -1411,14 +1424,14 @@ namespace QwenTerminal
         {
             if (!colour) return;
             if (vt) Console.Out.Write(s.Ansi);
-            else SetConsoleTextAttribute(hOut, s.Attr);
+            else if (IsWindows()) SetConsoleTextAttribute(hOut, s.Attr);
         }
 
         private static void Pop()
         {
             if (!colour) return;
             if (vt) Console.Out.Write("\x1b[0m");
-            else SetConsoleTextAttribute(hOut, 7);
+            else if (IsWindows()) SetConsoleTextAttribute(hOut, 7);
         }
 
         private static void Say(string text)
@@ -1534,7 +1547,18 @@ namespace QwenTerminal
                         string lainUrl = "https://tenor.com/ru/view/lain-serial-experiments-lain-gif-26108112";
                         try
                         {
-                            Process.Start(new ProcessStartInfo(lainUrl) { UseShellExecute = true });
+                            if (IsWindows())
+                            {
+                                Process.Start(new ProcessStartInfo(lainUrl) { UseShellExecute = true });
+                            }
+                            else if (File.Exists("/usr/bin/open"))
+                            {
+                                Process.Start("open", lainUrl);
+                            }
+                            else
+                            {
+                                Process.Start("xdg-open", lainUrl);
+                            }
                             Push(P_SOFT);
                             Say("   opening " + lainUrl);
                             Pop();
@@ -2030,7 +2054,7 @@ namespace QwenTerminal
 
         private static void Main(string[] args)
         {
-            hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+            hOut = IsWindows() ? GetStdHandle(STD_OUTPUT_HANDLE) : IntPtr.Zero;
 
             List<string> flags = new List<string>();
             foreach (string a in args) flags.Add(a.ToLowerInvariant());
@@ -2041,15 +2065,22 @@ namespace QwenTerminal
             try { Console.OutputEncoding = new UTF8Encoding(false); }
             catch { asciiOnly = true; plain = true; }
 
-            int mode;
             vt = false;
             colour = true;
             if (!Console.IsOutputRedirected && !plain)
             {
-                if (GetConsoleMode(hOut, out mode) && SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+                if (IsWindows())
                 {
-                    int back;
-                    if (GetConsoleMode(hOut, out back)) vt = (back & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+                    int mode;
+                    if (GetConsoleMode(hOut, out mode) && SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+                    {
+                        int back;
+                        if (GetConsoleMode(hOut, out back)) vt = (back & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+                    }
+                }
+                else
+                {
+                    vt = true;
                 }
             }
             if (plain || Console.IsOutputRedirected) colour = false;

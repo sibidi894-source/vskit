@@ -1,0 +1,65 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - rid: osx-arm64
+            asset_name: vskit_terminal-macos-apple-silicon
+          - rid: osx-x64
+            asset_name: vskit_terminal-macos-intel
+          - rid: linux-x64
+            asset_name: vskit_terminal-linux-x64
+          - rid: win-x64
+            asset_name: vskit_terminal-win-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish ${{ matrix.rid }}
+        run: |
+          dotnet publish vskit-terminal.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -o publish/${{ matrix.rid }}
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            cp publish/${{ matrix.rid }}/vskit_terminal.exe "${{ matrix.asset_name }}"
+          else
+            cp publish/${{ matrix.rid }}/vskit_terminal "${{ matrix.asset_name }}"
+            chmod +x "${{ matrix.asset_name }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
