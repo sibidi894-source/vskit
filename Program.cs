@@ -335,6 +335,7 @@ namespace QwenTerminal
 
         // ---------------- config ----------------
 
+        // Поздравляю ты залез в код и увидел этот коментарий но к сожалению мой апи ключ ты не увидишь <3.
         private static string apiUrl = "https://tooken.club/v1";
         private static string apiKey = "";
         private static string apiModel = "qwen3.8-flash";
